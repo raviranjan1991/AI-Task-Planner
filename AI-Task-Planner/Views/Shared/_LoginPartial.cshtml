@@ -1,0 +1,64 @@
+@using Microsoft.AspNetCore.Identity
+@inject SignInManager<AI_Task_Planner.Models.ApplicationUser> SignInManager
+@inject UserManager<AI_Task_Planner.Models.ApplicationUser> UserManager
+@using System.Threading.Tasks
+@using System.Linq
+
+@functions {
+    public async Task<string> GetUserRole()
+    {
+        if (SignInManager.IsSignedIn(User))
+        {
+            var user = await UserManager.GetUserAsync(User);
+            if (user != null)
+            {
+                var roles = await UserManager.GetRolesAsync(user);
+                return roles.FirstOrDefault() ?? "User";
+            }
+        }
+        return string.Empty;
+    }
+}
+
+<ul class="navbar-nav">
+@if (SignInManager.IsSignedIn(User))
+{
+    var user = UserManager.GetUserAsync(User).Result;
+    var roleName = GetUserRole().Result;
+    
+    <li class="nav-item dropdown">
+        <a class="nav-link dropdown-toggle text-white" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="fas fa-user-circle me-1"></i> Hello @user?.FirstName! 
+            <span class="badge bg-secondary ms-1">@roleName</span>
+        </a>
+        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarDropdown">
+            <li>
+                <span class="dropdown-item-text text-muted">
+                    <i class="fas fa-id-badge me-1"></i> @roleName Role
+                </span>
+            </li>
+            <li><hr class="dropdown-divider"></li>
+            <li>
+                <form class="form-inline" asp-area="" asp-controller="Login" asp-action="Logout">
+                    <button type="submit" class="btn btn-link dropdown-item">
+                        <i class="fas fa-sign-out-alt me-1"></i> Logout
+                    </button>
+                </form>
+            </li>
+        </ul>
+    </li>
+}
+else
+{
+    <li class="nav-item">
+        <a class="nav-link text-white" asp-area="" asp-controller="Registration" asp-action="Index">
+            <i class="fas fa-user-plus me-1"></i> Register
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link text-white" asp-area="" asp-controller="Login" asp-action="Index">
+            <i class="fas fa-sign-in-alt me-1"></i> Login
+        </a>
+    </li>
+}
+</ul>

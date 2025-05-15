@@ -1,0 +1,198 @@
+@model IEnumerable<AI_Task_Planner.Models.UserTask>
+
+@{
+    ViewData["Title"] = "Tasks";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Tasks</h1>
+    <div>
+        <a asp-action="CreateWithNL" class="btn btn-info me-2">
+            <i class="fas fa-magic me-1"></i> Create with Natural Language
+        </a>
+        <a asp-action="Create" class="btn btn-primary">
+            <i class="fas fa-plus me-1"></i> Create New Task
+        </a>
+    </div>
+</div>
+
+@await Html.PartialAsync("_ActiveTimers")
+
+<div class="card mb-4">
+    <div class="card-header bg-light">
+        <h5 class="mb-0">Filter Tasks</h5>
+    </div>
+    <div class="card-body">
+        <form asp-action="Index" method="get" class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">Search</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                    <input type="text" class="form-control" name="searchString" value="@ViewBag.SearchString" placeholder="Search by title or description">
+                </div>
+            </div>
+            
+            <div class="col-md-3">
+                <label class="form-label">Category</label>
+                <select class="form-select" name="categoryId" asp-items="ViewBag.Categories">
+                    <option value="">All Categories</option>
+                </select>
+            </div>
+              <div class="col-md-3">
+                <label class="form-label">Status</label>
+                <div class="form-check form-switch mt-2">
+                    <input class="form-check-input" type="checkbox" name="showCompleted" value="true" @(ViewBag.CurrentShowCompleted == true ? "checked" : "") id="showCompletedSwitch">
+                    <label class="form-check-label" for="showCompletedSwitch">Show Completed Tasks</label>
+                </div>
+            </div>
+            
+            <div class="col-md-2 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100">Apply Filters</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+@if (Model.Any())
+{
+    <div class="table-responsive">
+        <table class="table table-striped table-hover">            <thead class="table-light">
+                <tr>
+                    <th>Status</th>
+                    <th>Title</th>
+                    <th>Category</th>
+                    <th>Due Date</th>
+                    <th>Priority</th>
+                    @if (ViewBag.UserRole == "Manager" || ViewBag.UserRole == "Lead")
+                    {
+                        <th>Assigned To</th>
+                    }
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in Model) {
+                    <tr class="@(item.DueDate.HasValue && item.DueDate.Value.Date < DateTime.Today && !item.IsCompleted ? "table-danger" : 
+                               item.IsCompleted ? "table-success" : "")">
+                        <td>
+                            <form asp-action="ToggleComplete" asp-route-id="@item.TaskId" method="post" class="d-inline">
+                                <button type="submit" class="btn btn-sm @(item.IsCompleted ? "btn-success" : "btn-outline-secondary")" title="@(item.IsCompleted ? "Mark as Incomplete" : "Mark as Complete")">
+                                    <i class="fas @(item.IsCompleted ? "fa-check-circle" : "fa-circle")"></i>
+                                </button>
+                            </form>
+                        </td>
+                        <td>
+                            <a asp-action="Details" asp-route-id="@item.TaskId">@item.Title</a>
+                        </td>
+                        <td>
+                            @(item.Category?.Name ?? "None")
+                        </td>
+                        <td>
+                            @if (item.DueDate.HasValue)
+                            {
+                                @item.DueDate.Value.ToShortDateString()
+                                
+                                @if (item.DueDate.Value.Date == DateTime.Today)
+                                {
+                                    <span class="badge bg-warning text-dark ms-1">Today</span>
+                                }
+                                else if (item.DueDate.Value.Date < DateTime.Today && !item.IsCompleted)
+                                {
+                                    <span class="badge bg-danger ms-1">Overdue</span>
+                                }
+                            }
+                            else
+                            {
+                                <span class="text-muted">No due date</span>
+                            }
+                        </td>
+                        <td>
+                            @{
+                                var priorityText = item.Priority switch
+                                {
+                                    1 => "High",
+                                    2 => "Medium",
+                                    3 => "Low",
+                                    _ => "None"
+                                };
+                                
+                                var priorityBadge = item.Priority switch
+                                {
+                                    1 => "bg-danger",
+                                    2 => "bg-warning text-dark",
+                                    3 => "bg-info text-dark",
+                                    _ => "bg-secondary"
+                                };
+                            }
+                            <span class="badge @priorityBadge">@priorityText</span>
+                        </td>
+                        @if (ViewBag.UserRole == "Manager" || ViewBag.UserRole == "Lead")
+                        {
+                            <td>
+                                @if (item.AssignedToUser != null)
+                                {
+                                    <span class="badge bg-secondary">
+                                        <i class="fas fa-user me-1"></i>
+                                        @item.AssignedToUser.FirstName @item.AssignedToUser.LastName
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted"><i class="fas fa-user-slash"></i> Unassigned</span>
+                                }
+                            </td>
+                        }                        <td>
+                            <div class="btn-group" role="group">
+                                <a asp-action="Edit" asp-route-id="@item.TaskId" class="btn btn-sm btn-outline-primary" title="Edit">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                <a asp-action="Details" asp-route-id="@item.TaskId" class="btn btn-sm btn-outline-info" title="Details">
+                                    <i class="fas fa-info-circle"></i>
+                                </a>                                <a asp-controller="TaskTime" asp-action="ForTask" asp-route-id="@item.TaskId" class="btn btn-sm btn-outline-secondary" title="Time Logs">
+                                    <i class="fas fa-clock"></i>
+                                </a>
+                                  @{
+                                    var activeLog = ViewBag.ActiveTimeLogs != null ? 
+                                        (ViewBag.ActiveTimeLogs as IEnumerable<AI_Task_Planner.Models.TaskTimeLog>)?.FirstOrDefault(l => l.TaskId == item.TaskId) : null;
+                                }
+                                  @if (activeLog == null)
+                                {
+                                    <a asp-controller="TaskTime" asp-action="StartTimer" asp-route-taskId="@item.TaskId" asp-route-returnUrl="@Context.Request.Path" class="btn btn-sm btn-outline-success" title="Start Timer">
+                                        <i class="fas fa-play"></i>
+                                    </a>
+                                }
+                                else if (activeLog.IsPaused)
+                                {
+                                    <a asp-controller="TaskTime" asp-action="ResumeTimer" asp-route-taskId="@item.TaskId" asp-route-returnUrl="@Context.Request.Path" class="btn btn-sm btn-info" title="Resume Timer">
+                                        <i class="fas fa-play-circle"></i>
+                                    </a>
+                                }
+                                else
+                                {
+                                    <a asp-controller="TaskTime" asp-action="PauseTimer" asp-route-taskId="@item.TaskId" asp-route-returnUrl="@Context.Request.Path" class="btn btn-sm btn-warning" title="Pause Timer">
+                                        <i class="fas fa-pause"></i>
+                                    </a>
+                                    <a asp-controller="TaskTime" asp-action="StopTimer" asp-route-taskId="@item.TaskId" asp-route-returnUrl="@Context.Request.Path" class="btn btn-sm btn-danger" title="Stop Timer">
+                                        <i class="fas fa-stop"></i>
+                                    </a>
+                                }
+                                
+                                <a asp-action="Delete" asp-route-id="@item.TaskId" class="btn btn-sm btn-outline-danger" title="Delete">
+                                    <i class="fas fa-trash"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+else
+{
+    <div class="alert alert-info text-center">
+        <h4 class="alert-heading">No tasks found</h4>
+        <p>There are no tasks matching your criteria. Try changing your filters or create a new task.</p>
+        <a asp-action="Create" class="btn btn-primary mt-3">Create New Task</a>
+    </div>
+}

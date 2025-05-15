@@ -1,0 +1,86 @@
+@{
+    var activeTimeLogs = ViewBag.ActiveTimeLogs as List<AI_Task_Planner.Models.TaskTimeLog>;
+}
+
+@if (activeTimeLogs != null && activeTimeLogs.Any())
+{
+    <div class="card mb-4 shadow-sm border-warning">
+        <div class="card-header bg-warning">
+            <h5 class="mb-0">
+                <i class="fas fa-clock me-2"></i>Active Timers
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Task</th>
+                            <th>Started</th>
+                            <th>Elapsed</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var log in activeTimeLogs)
+                        {
+                            var elapsed = log.IsPaused
+                                ? (log.PauseTime.Value - log.StartTime).TotalMinutes - log.TotalPausedMinutes
+                                : (DateTime.Now - log.StartTime).TotalMinutes - log.TotalPausedMinutes;
+                            
+                            var hours = (int)elapsed / 60;
+                            var minutes = (int)elapsed % 60;
+                            var timeDisplay = hours > 0 ? $"{hours}h {minutes}m" : $"{minutes}m";
+                            
+                            <tr>
+                                <td>
+                                    <a href="@Url.Action("Details", "Tasks", new { id = log.TaskId })">
+                                        @log.Task.Title
+                                    </a>
+                                </td>
+                                <td>@log.StartTime.ToString("h:mm tt")</td>
+                                <td><span class="fw-bold">@timeDisplay</span></td>
+                                <td>
+                                    @if (log.IsPaused)
+                                    {
+                                        <span class="badge bg-info">Paused</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-success">Running</span>
+                                    }
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm" role="group">                                        @if (log.IsPaused)
+                                        {
+                                            <a asp-controller="TaskTime" asp-action="ResumeTimer" asp-route-taskId="@log.TaskId" asp-route-returnUrl="@Context.Request.Path"
+                                               class="btn btn-sm btn-info" title="Resume Timer">
+                                                <i class="fas fa-play-circle"></i>
+                                            </a>
+                                        }
+                                        else
+                                        {
+                                            <a asp-controller="TaskTime" asp-action="PauseTimer" asp-route-taskId="@log.TaskId" asp-route-returnUrl="@Context.Request.Path"
+                                               class="btn btn-sm btn-warning" title="Pause Timer">
+                                                <i class="fas fa-pause"></i>
+                                            </a>
+                                        }
+                                        <a asp-controller="TaskTime" asp-action="StopTimer" asp-route-taskId="@log.TaskId" asp-route-returnUrl="@Context.Request.Path"
+                                           class="btn btn-sm btn-danger" title="Stop Timer">
+                                            <i class="fas fa-stop"></i>
+                                        </a>
+                                        <a asp-controller="TimeLogs" asp-action="ForTask" asp-route-id="@log.TaskId"
+                                           class="btn btn-sm btn-secondary" title="View Time Logs">
+                                            <i class="fas fa-history"></i>
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}

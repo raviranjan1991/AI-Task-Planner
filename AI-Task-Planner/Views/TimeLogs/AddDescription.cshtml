@@ -1,0 +1,70 @@
+@model AI_Task_Planner.Models.TaskTimeLog
+
+@{
+    ViewData["Title"] = "Add Time Log Description";
+}
+
+<div class="card mb-4 shadow-sm">
+    <div class="card-header bg-primary text-white">
+        <h4 class="mb-0">Add Time Log Description</h4>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle me-2"></i>
+            Please add a description of what you worked on during this time period.
+        </div>
+        
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <label class="fw-bold">Task:</label>
+                    <div>@ViewBag.TaskTitle</div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <label class="fw-bold">Duration:</label>
+                    <div>
+                        @{
+                            var hours = ViewBag.Duration / 60;
+                            var minutes = ViewBag.Duration % 60;
+                            
+                            if (hours > 0)
+                            {
+                                <span>@hours hours @minutes minutes</span>
+                            }
+                            else
+                            {
+                                <span>@minutes minutes</span>
+                            }
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <form asp-action="AddDescription" method="post">
+            <input type="hidden" asp-for="LogId" />
+            
+            <div class="form-group mb-3">
+                <label asp-for="Description" class="form-label">Description</label>
+                <textarea asp-for="Description" class="form-control" rows="4" placeholder="What did you accomplish during this time?" autofocus></textarea>
+                <span asp-validation-for="Description" class="text-danger"></span>
+                <small class="form-text text-muted">Describe what tasks you worked on or what you accomplished.</small>
+            </div>
+            
+            <div class="d-flex justify-content-between mt-4">
+                <a asp-action="ForTask" asp-route-id="@ViewBag.TaskId" class="btn btn-outline-secondary">
+                    <i class="fas fa-times me-2"></i>Skip
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save me-2"></i>Save Description
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+@section Scripts {
+    @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+}

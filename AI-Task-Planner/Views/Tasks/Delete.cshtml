@@ -1,0 +1,113 @@
+@model AI_Task_Planner.Models.UserTask
+
+@{
+    ViewData["Title"] = "Delete Task";
+}
+
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow border-danger">
+                <div class="card-header bg-danger text-white">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-trash-alt me-2 fa-lg"></i>
+                        <h4 class="mb-0">Delete Task</h4>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-danger">
+                        <div class="d-flex">
+                            <i class="fas fa-exclamation-triangle fa-2x me-3 mt-1"></i>
+                            <div>
+                                <h5>Warning: This action cannot be undone!</h5>
+                                <p class="mb-0">You are about to permanently delete this task. Please confirm your action.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card mb-4">
+                        <div class="card-header bg-light">
+                            <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Task Information</h5>
+                        </div>
+                        <div class="card-body">
+                            <h3>@Model.Title</h3>
+                            
+                            <div class="d-flex mb-3">
+                                @if (Model.IsCompleted)
+                                {
+                                    <span class="badge bg-success me-2">Completed</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-warning me-2">Pending</span>
+                                }
+
+                                <span class="badge bg-@(Model.Priority == 1 ? "danger" : Model.Priority == 2 ? "warning" : "info")">
+                                    @(Model.Priority == 1 ? "High" : Model.Priority == 2 ? "Medium" : "Low") Priority
+                                </span>
+
+                                @if (Model.Category != null)
+                                {
+                                    <span class="badge bg-info ms-2">@Model.Category.Name</span>
+                                }
+                            </div>
+
+                            @if (!string.IsNullOrEmpty(Model.Description))
+                            {
+                                <div class="mb-3">
+                                    <h6 class="fw-bold">Description:</h6>
+                                    <p>@Model.Description</p>
+                                </div>
+                            }
+
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label class="form-label fw-bold">Created On:</label>
+                                        <p class="mb-0">@Model.CreatedOn.ToString("MMM d, yyyy h:mm tt")</p>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label class="form-label fw-bold">Due Date:</label>
+                                        <p class="mb-0">
+                                            @(Model.DueDate.HasValue ? Model.DueDate.Value.ToString("MMM d, yyyy") : "None")
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <form asp-action="Delete" method="post">
+                        <input type="hidden" asp-for="TaskId" />
+                        
+                        <div class="form-check mb-4">
+                            <input class="form-check-input" type="checkbox" id="confirmDelete" required>
+                            <label class="form-check-label" for="confirmDelete">
+                                I understand that this action will permanently delete this task
+                            </label>
+                        </div>
+                        
+                        <div class="form-group d-flex justify-content-between mt-4 pt-3 border-top">
+                            <a asp-action="Index" class="btn btn-outline-secondary">
+                                <i class="fas fa-arrow-left me-2"></i>Back to List
+                            </a>
+                            <button type="submit" class="btn btn-danger" id="deleteButton" disabled>
+                                <i class="fas fa-trash-alt me-2"></i>Delete Task
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.getElementById('confirmDelete').addEventListener('change', function() {
+            document.getElementById('deleteButton').disabled = !this.checked;
+        });
+    </script>
+}

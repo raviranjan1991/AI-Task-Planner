@@ -1,0 +1,48 @@
+@model AI_Task_Planner.Models.UserTask
+
+@{
+    ViewData["Title"] = "Edit Task";
+}
+
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-edit me-2 fa-lg"></i>
+                        <h4 class="mb-0">Edit Task</h4>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <form action="/Tasks/Edit/@Model.TaskId" method="post">
+                        <div class="alert alert-info">
+                            <div class="d-flex align-items-center">
+                                <div class="me-3">
+                                    <i class="fas fa-info-circle fa-2x"></i>
+                                </div>
+                                <div>
+                                    <h5 class="alert-heading mb-1">Sorry!</h5>
+                                    <p class="mb-0">The Edit feature is currently under maintenance. We're working to fix this issue as soon as possible.</p>
+                                </div>
+                                <div class="ms-auto">
+                                    <a href="/Tasks" class="btn btn-primary">Back to Tasks</a>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="mt-4">
+    <a asp-action="Index" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left me-1"></i> Back to List
+    </a>
+</div>
+
+@section Scripts {
+    @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+}

@@ -1,0 +1,159 @@
+@model AI_Task_Planner.Models.UserTask
+
+@{
+    ViewData["Title"] = "Edit Task";
+}
+
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-edit me-2 fa-lg"></i>
+                        <h4 class="mb-0">Edit Task</h4>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <form asp-action="Edit" method="post">
+                        <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+                        <input type="hidden" asp-for="TaskId" />
+                        <input type="hidden" asp-for="CreatedOn" />
+                        <input type="hidden" asp-for="ModifiedOn" />
+
+                        <div class="row mb-3">
+                            <div class="col-md-8">
+                                <div class="form-group">
+                                    <label asp-for="Title" class="control-label fw-bold">
+                                        <i class="fas fa-heading me-1"></i> Task Title
+                                    </label>
+                                    <input asp-for="Title" class="form-control" />
+                                    <span asp-validation-for="Title" class="text-danger"></span>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label asp-for="CategoryId" class="control-label fw-bold">
+                                        <i class="fas fa-tag me-1"></i> Category
+                                    </label>
+                                    <select asp-for="CategoryId" class="form-select" asp-items="ViewBag.Categories">
+                                        <option value="">-- Select Category --</option>
+                                    </select>
+                                    <span asp-validation-for="CategoryId" class="text-danger"></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group mb-3">
+                            <label asp-for="Description" class="control-label fw-bold">
+                                <i class="fas fa-align-left me-1"></i> Description
+                            </label>
+                            <textarea asp-for="Description" class="form-control" rows="4"></textarea>
+                            <span asp-validation-for="Description" class="text-danger"></span>
+                        </div>                        <div class="row mb-3">
+                            <div class="col-md-3">
+                                <div class="form-group">
+                                    <label asp-for="DueDate" class="control-label fw-bold">
+                                        <i class="fas fa-calendar-alt me-1"></i> Due Date
+                                    </label>
+                                    <input asp-for="DueDate" class="form-control" type="datetime-local" />
+                                    <span asp-validation-for="DueDate" class="text-danger"></span>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-group">
+                                    <label asp-for="Priority" class="control-label fw-bold">
+                                        <i class="fas fa-flag me-1"></i> Priority
+                                    </label>
+                                    <select asp-for="Priority" class="form-select">
+                                        <option value="1">High</option>
+                                        <option value="2">Medium</option>
+                                        <option value="3">Low</option>
+                                    </select>
+                                    <span asp-validation-for="Priority" class="text-danger"></span>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                @if (ViewBag.CanReassign == true)
+                                {
+                                    <div class="form-group">
+                                        <label asp-for="AssignedToUserId" class="control-label fw-bold">
+                                            <i class="fas fa-user-check me-1"></i> Assigned To
+                                        </label>
+                                        <select asp-for="AssignedToUserId" class="form-select" asp-items="ViewBag.AssignableUsers">
+                                            <option value="">-- Select User --</option>
+                                        </select>
+                                    </div>
+                                }
+                                else if (Model.AssignedToUser != null)
+                                {
+                                    <div class="form-group">
+                                        <label class="control-label fw-bold">
+                                            <i class="fas fa-user-check me-1"></i> Assigned To
+                                        </label>
+                                        <input type="text" class="form-control" disabled value="@(Model.AssignedToUser.LastName), @(Model.AssignedToUser.FirstName)" />
+                                        <input type="hidden" asp-for="AssignedToUserId" />
+                                    </div>
+                                }
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-group">
+                                    <label class="control-label fw-bold d-block mb-2">
+                                        <i class="fas fa-check-circle me-1"></i> Status
+                                    </label>
+                                    <div class="form-check form-switch">
+                                        <input asp-for="IsCompleted" class="form-check-input" type="checkbox" role="switch" />
+                                        <label class="form-check-label" for="IsCompleted">Mark as completed</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>                        <div class="card mb-3 bg-light">
+                            <div class="card-body">
+                                <h6 class="card-title">
+                                    <i class="fas fa-info-circle me-2"></i>Task Information
+                                </h6>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <small class="text-muted d-block mb-2">Created: @Model.CreatedOn.ToString("MMM d, yyyy h:mm tt")</small>
+                                        @if (Model.ModifiedOn.HasValue)
+                                        {
+                                            <small class="text-muted d-block mb-2">Last Modified: @Model.ModifiedOn.Value.ToString("MMM d, yyyy h:mm tt")</small>
+                                        }
+                                    </div>
+                                    <div class="col-md-6">
+                                        @if (Model.AssignedByUser != null && Model.AssignedOn.HasValue)
+                                        {
+                                            <small class="text-muted d-block mb-2">Assigned by: @Model.AssignedByUser.FirstName @Model.AssignedByUser.LastName</small>
+                                            <small class="text-muted d-block">Assigned on: @Model.AssignedOn.Value.ToString("MMM d, yyyy h:mm tt")</small>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group d-flex justify-content-between mt-4 pt-3 border-top">
+                            <a asp-action="Index" class="btn btn-outline-secondary">
+                                <i class="fas fa-arrow-left me-2"></i>Back to List
+                            </a>
+                            <div>
+                                @if (ViewBag.UserRole == "Manager" || ViewBag.UserRole == "Lead")
+                                {
+                                    <a asp-action="Delete" asp-route-id="@Model.TaskId" class="btn btn-outline-danger me-2">
+                                        <i class="fas fa-trash-alt me-2"></i>Delete
+                                    </a>
+                                }
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-save me-2"></i>Save Changes
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+}

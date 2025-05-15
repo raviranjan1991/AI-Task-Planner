@@ -1,0 +1,65 @@
+@{
+    ViewData["Title"] = "Create Task with Natural Language";
+}
+
+<h1>Create Task Using Natural Language</h1>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-chat-text"></i> Natural Language Task Creation</h5>
+            </div>
+            <div class="card-body">
+                <form asp-action="CreateWithNL">
+                    <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+                    
+                    <div class="form-group mb-3">
+                        <label for="naturalLanguageInput" class="form-label">Describe Your Task</label>
+                        <textarea id="naturalLanguageInput" name="naturalLanguageInput" class="form-control" rows="5" 
+                            placeholder="Example: Schedule meeting with design team next Tuesday at 2pm with high priority"></textarea>
+                    </div>
+                    
+                    <div class="form-group mt-4">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-magic"></i> Create Task
+                        </button>
+                        <a asp-action="Index" class="btn btn-secondary">
+                            <i class="bi bi-x-circle"></i> Cancel
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> How to Use</h5>
+            </div>
+            <div class="card-body">
+                <h6>Example phrases you can try:</h6>
+                <ul>
+                    <li>"Schedule meeting with design team next Tuesday at 2pm"</li>
+                    <li>"Finish project proposal by Friday with high priority"</li>
+                    <li>"Call client John about project updates tomorrow morning"</li>
+                    <li>"Review documentation for Development category by end of day"</li>
+                    <li>"Prepare presentation slides for monthly meeting due in 3 days"</li>
+                    <li>"Send weekly report to team by Friday 5pm"</li>
+                </ul>
+                
+                <h6>The system can understand:</h6>
+                <ul>
+                    <li>Task titles and descriptions</li>
+                    <li>Due dates and times</li>
+                    <li>Priority levels (high, medium, low)</li>
+                    <li>Categories (if they match existing ones)</li>
+                    <li>Assignees (based on your permission level)</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+}

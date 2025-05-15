@@ -1,0 +1,587 @@
+using System;
+using System.Linq;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Rendering;
+using Microsoft.EntityFrameworkCore;
+using AI_Task_Planner.Data;
+using AI_Task_Planner.Models;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
+
+namespace AI_Task_Planner.Controllers
+{
+    [Authorize]
+    public class TasksController : Controller
+    {
+        private readonly ApplicationDbContext _context;
+        private readonly UserManager<ApplicationUser> _userManager;
+
+        public TasksController(ApplicationDbContext context, UserManager<ApplicationUser> userManager)
+        {
+            _context = context;
+            _userManager = userManager;
+        }        // GET: Tasks
+        public async Task<IActionResult> Index(string searchString, int? categoryId, bool? showCompleted)
+        {
+            // Get the current user and their roles to customize the view
+            var user = await _userManager.GetUserAsync(User);
+            var userRole = "User"; // Default role
+            
+            if (user != null)
+            {
+                var roles = await _userManager.GetRolesAsync(user);
+                userRole = roles.FirstOrDefault() ?? "User";
+            }
+            
+            var tasksQuery = _context.Tasks
+                .Include(t => t.Category)
+                .Include(t => t.AssignedToUser)
+                .Include(t => t.AssignedByUser)
+                .AsQueryable();
+
+            // Apply role-specific filters
+            if (userRole == "Manager")
+            {
+                // Manager can see all tasks, no additional filtering needed
+                ViewBag.UserRole = "Manager";
+            }
+            else if (userRole == "Lead")
+            {
+                // Lead can see tasks assigned by them or assigned to them
+                ViewBag.UserRole = "Lead";
+                if (user != null)
+                {
+                    tasksQuery = tasksQuery.Where(t => t.AssignedByUserId == user.Id || t.AssignedToUserId == user.Id);
+                }
+            }
+            else
+            {
+                // Regular users can only see tasks assigned to them
+                ViewBag.UserRole = "User";
+                if (user != null)
+                {
+                    tasksQuery = tasksQuery.Where(t => t.AssignedToUserId == user.Id);
+                }
+            }
+            
+            // Filter by search string if provided
+            if (!string.IsNullOrEmpty(searchString))
+            {                tasksQuery = tasksQuery.Where(t => t.Title.Contains(searchString) || 
+                                                (t.Description != null && t.Description.Contains(searchString)));
+            }
+
+            // Filter by category if selected
+            if (categoryId.HasValue && categoryId > 0)
+            {
+                tasksQuery = tasksQuery.Where(t => t.CategoryId == categoryId);
+            }
+
+            // Filter by completion status if selected
+            if (showCompleted.HasValue)
+            {
+                tasksQuery = tasksQuery.Where(t => t.IsCompleted == showCompleted.Value);
+            }
+            else
+            {
+                // By default, show incomplete tasks
+                tasksQuery = tasksQuery.Where(t => !t.IsCompleted);
+            }
+
+            // Get categories for the filter dropdown
+            ViewBag.Categories = await _context.TaskCategories
+                .Select(c => new SelectListItem { Value = c.CategoryId.ToString(), Text = c.Name })
+                .ToListAsync();
+            
+            ViewBag.ShowCompleted = showCompleted ?? false;
+            ViewBag.SearchString = searchString;
+            ViewBag.CategoryId = categoryId;
+
+            return View(await tasksQuery.OrderBy(t => t.DueDate).ToListAsync());
+        }        // GET: Tasks/Details/5
+        public async Task<IActionResult> Details(int? id)
+        {
+            if (id == null)
+            {
+                return NotFound();
+            }
+
+            var task = await _context.Tasks
+                .Include(t => t.Category)
+                .Include(t => t.TimeLogs)
+                .ThenInclude(l => l.User)
+                .FirstOrDefaultAsync(m => m.TaskId == id);
+                
+            if (task == null)
+            {
+                return NotFound();
+            }
+              // Calculate total time spent
+            var completedLogs = task.TimeLogs.Where(l => l.EndTime.HasValue).ToList();
+            int totalMinutes = completedLogs.Sum(l => l.DurationMinutes);
+            task.TotalTimeSpent = totalMinutes;
+              // Check if there's an active timer for the current user
+            var user = await _userManager.GetUserAsync(User);
+            if (user != null)
+            {
+                var activeTimer = task.TimeLogs.FirstOrDefault(l => l.UserId == user.Id && !l.EndTime.HasValue);
+                ViewBag.HasActiveTimer = activeTimer != null;
+                ViewBag.IsTimerPaused = activeTimer?.IsPaused == true;
+            }
+
+            return View(task);
+        }        // GET: Tasks/Create
+        public async Task<IActionResult> Create()
+        {
+            ViewBag.Categories = await _context.TaskCategories
+                .Select(c => new SelectListItem { Value = c.CategoryId.ToString(), Text = c.Name })
+                .ToListAsync();
+                  // Get the current user and their role for assignment logic
+            var currentUser = await _userManager.GetUserAsync(User);
+            var currentUserRole = "User"; // Default role
+            
+            if (currentUser != null)
+            {
+                var userRoles = await _userManager.GetRolesAsync(currentUser);
+                currentUserRole = userRoles.FirstOrDefault() ?? "User";
+            }        // Prepare selectable users based on role hierarchy
+            if (currentUserRole == "Manager")
+            {
+                // Managers can assign to anyone
+                var users = await _userManager.Users
+                    .OrderBy(u => u.LastName)
+                    .ToListAsync();
+                    
+                var userItems = new List<SelectListItem>();
+                foreach (var u in users)
+                {
+                    var roles = await _userManager.GetRolesAsync(u);
+                    var role = roles.FirstOrDefault() ?? "User";
+                    userItems.Add(new SelectListItem 
+                    { 
+                        Value = u.Id,
+                        Text = $"{u.LastName}, {u.FirstName} ({role})"
+                    });
+                }
+                
+                ViewBag.AssignableUsers = userItems;
+            }
+            else if (currentUserRole == "Lead" && currentUser != null)
+            {
+                // Leads can assign to regular users and themselves
+                var regularUsers = await _userManager.GetUsersInRoleAsync("User");
+                var selectableUsers = new List<ApplicationUser>(regularUsers);
+                selectableUsers.Add(currentUser); // Add themselves
+                
+                ViewBag.AssignableUsers = selectableUsers
+                    .OrderBy(u => u.LastName)
+                    .Select(u => new SelectListItem 
+                    { 
+                        Value = u.Id,
+                        Text = $"{u.LastName}, {u.FirstName}" + (u.Id == currentUser.Id ? " (You)" : "")
+                    })
+                    .ToList();
+            }
+            else if (currentUser != null)
+            {
+                // Regular users can only assign to themselves
+                ViewBag.AssignableUsers = new List<SelectListItem>
+                {
+                    new SelectListItem
+                    {
+                        Value = currentUser.Id,
+                        Text = $"{currentUser.LastName}, {currentUser.FirstName} (You)",
+                        Selected = true
+                    }
+                };
+            }
+            else
+            {
+                ViewBag.AssignableUsers = new List<SelectListItem>();
+            }
+            
+            ViewBag.CurrentUserId = currentUser?.Id;
+            ViewBag.CurrentUserRole = currentUserRole;
+            
+            return View();
+        }        
+        
+        // POST: Tasks/Create
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Create([Bind("TaskId,Title,Description,DueDate,Priority,CategoryId,AssignedToUserId")] UserTask task)
+        {
+            if (ModelState.IsValid)
+            {
+                var currentUser = await _userManager.GetUserAsync(User);
+                
+                task.CreatedOn = DateTime.Now;
+                task.IsCompleted = false;
+                task.AssignedByUserId = currentUser?.Id;
+                task.AssignedOn = DateTime.Now;
+                
+                _context.Add(task);
+                await _context.SaveChangesAsync();
+                return RedirectToAction(nameof(Index));
+            }
+            
+            // If we got this far, something failed, redisplay form
+            ViewBag.Categories = await _context.TaskCategories
+                .Select(c => new SelectListItem { Value = c.CategoryId.ToString(), Text = c.Name })
+                .ToListAsync();
+                  // Repopulate assignable users
+            var user = await _userManager.GetUserAsync(User);
+            var userRole = "User"; // Default role
+            
+            if (user != null)
+            {
+                var roles = await _userManager.GetRolesAsync(user);
+                userRole = roles.FirstOrDefault() ?? "User";                if (userRole == "Manager")
+                {
+                    var users = await _userManager.Users
+                        .OrderBy(u => u.LastName)
+                        .ToListAsync();
+                    
+                    var userItems = new List<SelectListItem>();
+                    foreach (var u in users)
+                    {
+                        var userRoles = await _userManager.GetRolesAsync(u);
+                        var role = userRoles.FirstOrDefault() ?? "User";
+                        userItems.Add(new SelectListItem 
+                        { 
+                            Value = u.Id,
+                            Text = $"{u.LastName}, {u.FirstName} ({role})"
+                        });
+                    }
+                    
+                    ViewBag.AssignableUsers = userItems;
+                }
+                else if (userRole == "Lead")
+                {
+                    var regularUsers = await _userManager.GetUsersInRoleAsync("User");
+                    var selectableUsers = new List<ApplicationUser>(regularUsers);
+                    selectableUsers.Add(user); // Add themselves
+                    
+                    ViewBag.AssignableUsers = selectableUsers
+                        .OrderBy(u => u.LastName)
+                        .Select(u => new SelectListItem 
+                        { 
+                            Value = u.Id,
+                            Text = $"{u.LastName}, {u.FirstName}" + (u.Id == user.Id ? " (You)" : "")
+                        })
+                        .ToList();
+                }
+                else
+                {
+                    ViewBag.AssignableUsers = new List<SelectListItem>
+                    {
+                        new SelectListItem
+                        {
+                            Value = user.Id,
+                            Text = $"{user.LastName}, {user.FirstName} (You)",
+                            Selected = true
+                        }
+                    };
+                }
+            }
+            else
+            {
+                ViewBag.AssignableUsers = new List<SelectListItem>();
+            }
+            
+            return View(task);
+        }        // GET: Tasks/Edit/5
+        public async Task<IActionResult> Edit(int? id)
+        {
+            if (id == null)
+            {
+                return NotFound();
+            }
+
+            var task = await _context.Tasks
+                .Include(t => t.AssignedToUser)
+                .Include(t => t.AssignedByUser)
+                .FirstOrDefaultAsync(m => m.TaskId == id);
+                
+            if (task == null)
+            {
+                return NotFound();
+            }
+            
+            ViewBag.Categories = await _context.TaskCategories
+                .Select(c => new SelectListItem { Value = c.CategoryId.ToString(), Text = c.Name })
+                .ToListAsync();
+                
+            // Get the current user and their role
+            var currentUser = await _userManager.GetUserAsync(User);
+            var currentUserRole = "User"; // Default role
+            
+            if (currentUser != null)
+            {
+                var userRoles = await _userManager.GetRolesAsync(currentUser);
+                currentUserRole = userRoles.FirstOrDefault() ?? "User";
+            }
+            
+            // Only allow reassigning if the user is the assigner or a manager
+            bool canReassign = false;
+            if (currentUser != null)
+            {
+                canReassign = (task.AssignedByUserId == currentUser.Id || currentUserRole == "Manager");
+            }
+            ViewBag.CanReassign = canReassign;
+            
+            // Prepare selectable users for assignment if allowed to reassign
+            if (canReassign)
+            {
+                if (currentUserRole == "Manager")
+                {                    // Managers can assign to anyone
+                    var usersList = await _userManager.Users
+                        .OrderBy(u => u.LastName)
+                        .ToListAsync();
+                        
+                    var assignableUsers = new List<SelectListItem>();
+                    foreach (var u in usersList)
+                    {
+                        var roles = await _userManager.GetRolesAsync(u);
+                        var role = roles.FirstOrDefault() ?? "User";
+                        assignableUsers.Add(new SelectListItem
+                        {
+                            Value = u.Id,
+                            Text = $"{u.LastName}, {u.FirstName} ({role})",
+                            Selected = u.Id == task.AssignedToUserId
+                        });
+                    }
+                    ViewBag.AssignableUsers = assignableUsers;
+                }
+                else if (currentUserRole == "Lead" && currentUser != null)
+                {
+                    // Leads can assign to regular users and themselves
+                    var regularUsers = await _userManager.GetUsersInRoleAsync("User");
+                    var selectableUsers = new List<ApplicationUser>(regularUsers);
+                    selectableUsers.Add(currentUser); // Add themselves
+                    
+                    ViewBag.AssignableUsers = selectableUsers
+                        .OrderBy(u => u.LastName)
+                        .Select(u => new SelectListItem 
+                        { 
+                            Value = u.Id,
+                            Text = $"{u.LastName}, {u.FirstName}" + (u.Id == currentUser.Id ? " (You)" : ""),
+                            Selected = u.Id == task.AssignedToUserId
+                        })
+                        .ToList();
+                }
+            }
+            
+            return View(task);
+        }        // POST: Tasks/Edit/5
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Edit(int id, [Bind("TaskId,Title,Description,DueDate,Priority,CategoryId,IsCompleted,AssignedToUserId")] UserTask task)
+        {
+            if (id != task.TaskId)
+            {
+                return NotFound();
+            }
+
+            if (ModelState.IsValid)
+            {
+                try
+                {
+                    // Get the existing task to preserve creation date and assignment info
+                    var existingTask = await _context.Tasks.AsNoTracking().FirstOrDefaultAsync(t => t.TaskId == id);
+                    
+                    if (existingTask != null)
+                    {
+                        task.CreatedOn = existingTask.CreatedOn;
+                        task.AssignedByUserId = existingTask.AssignedByUserId;
+                        task.AssignedOn = existingTask.AssignedOn;
+                        
+                        // If assignment changed, update assigned info
+                        if (existingTask.AssignedToUserId != task.AssignedToUserId)
+                        {
+                            var currentUser = await _userManager.GetUserAsync(User);
+                            task.AssignedByUserId = currentUser?.Id;
+                            task.AssignedOn = DateTime.Now;
+                        }
+                    }
+                    else
+                    {
+                        task.CreatedOn = DateTime.Now;
+                    }
+                    
+                    task.ModifiedOn = DateTime.Now;
+                    
+                    _context.Update(task);
+                    await _context.SaveChangesAsync();
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    if (!TaskExists(task.TaskId))
+                    {
+                        return NotFound();
+                    }
+                    else
+                    {
+                        throw;
+                    }
+                }
+                return RedirectToAction(nameof(Index));
+            }
+            
+            ViewBag.Categories = await _context.TaskCategories
+                .Select(c => new SelectListItem { Value = c.CategoryId.ToString(), Text = c.Name })
+                .ToListAsync();
+              // Repopulate the assignable users
+            var user = await _userManager.GetUserAsync(User);
+            if (user != null)
+            {
+                var roles = await _userManager.GetRolesAsync(user);
+                var userRole = roles.FirstOrDefault() ?? "User";
+                
+                // Only allow reassigning if the user is the assigner or a manager
+                bool canReassign = task.AssignedByUserId == user.Id || userRole == "Manager";
+                ViewBag.CanReassign = canReassign;
+                
+                if (canReassign)
+                {
+                    if (userRole == "Manager")
+                    {                        var usersList = await _userManager.Users
+                            .OrderBy(u => u.LastName)
+                            .ToListAsync();
+                            
+                        var assignableUsers = new List<SelectListItem>();
+                        foreach (var u in usersList)
+                        {
+                            var uRoles = await _userManager.GetRolesAsync(u);
+                            var uRole = uRoles.FirstOrDefault() ?? "User";
+                            assignableUsers.Add(new SelectListItem
+                            {
+                                Value = u.Id,
+                                Text = $"{u.LastName}, {u.FirstName} ({uRole})",
+                                Selected = u.Id == task.AssignedToUserId
+                            });
+                        }
+                        ViewBag.AssignableUsers = assignableUsers;
+                    }
+                    else if (userRole == "Lead")
+                    {
+                        var regularUsers = await _userManager.GetUsersInRoleAsync("User");
+                        var selectableUsers = new List<ApplicationUser>(regularUsers);
+                        selectableUsers.Add(user); // Add themselves
+                        
+                        ViewBag.AssignableUsers = selectableUsers
+                            .OrderBy(u => u.LastName)
+                            .Select(u => new SelectListItem 
+                            { 
+                                Value = u.Id,
+                                Text = $"{u.LastName}, {u.FirstName}" + (u.Id == user.Id ? " (You)" : ""),
+                                Selected = u.Id == task.AssignedToUserId
+                            })
+                            .ToList();
+                    }
+                }
+            }
+            
+            return View(task);
+        }        // GET: Tasks/Delete/5
+        [Authorize(Roles = "Manager,Lead")]
+        public async Task<IActionResult> Delete(int? id)
+        {
+            if (id == null)
+            {
+                return NotFound();
+            }
+
+            var task = await _context.Tasks
+                .Include(t => t.Category)
+                .FirstOrDefaultAsync(m => m.TaskId == id);
+            if (task == null)
+            {
+                return NotFound();
+            }
+
+            return View(task);
+        }        // POST: Tasks/Delete/5
+        [HttpPost, ActionName("Delete")]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = "Manager,Lead")]
+        public async Task<IActionResult> DeleteConfirmed(int id)
+        {
+            var task = await _context.Tasks.FindAsync(id);
+            if (task != null)
+            {
+                _context.Tasks.Remove(task);
+                await _context.SaveChangesAsync();
+            }
+            return RedirectToAction(nameof(Index));
+        }
+
+        // POST: Tasks/ToggleComplete/5
+        [HttpPost]
+        public async Task<IActionResult> ToggleComplete(int id)
+        {
+            var task = await _context.Tasks.FindAsync(id);
+            if (task == null)
+            {
+                return NotFound();
+            }            task.IsCompleted = !task.IsCompleted;
+            task.ModifiedOn = DateTime.Now;
+            await _context.SaveChangesAsync();            // Return to the page that initiated the toggle action
+            if (Request.Headers.ContainsKey("Referer"))
+            {
+                string referer = Request.Headers["Referer"].ToString();
+                if (!string.IsNullOrEmpty(referer))
+                {
+                    return Redirect(referer);
+                }
+            }
+            
+            // Fallback to index if referer is not available
+            return RedirectToAction(nameof(Index));
+        }
+
+        // GET: Tasks/Dashboard
+        [Authorize(Roles = "Manager")]
+        public async Task<IActionResult> Dashboard()
+        {
+            var taskStats = new {
+                TotalTasks = await _context.Tasks.CountAsync(),
+                CompletedTasks = await _context.Tasks.Where(t => t.IsCompleted).CountAsync(),
+                OverdueTasks = await _context.Tasks.Where(t => !t.IsCompleted && t.DueDate < DateTime.Now).CountAsync(),
+                TasksByCategory = await _context.Tasks
+                    .GroupBy(t => t.CategoryId)
+                    .Select(g => new { 
+                        CategoryId = g.Key,
+                        Count = g.Count() 
+                    })
+                    .ToListAsync()
+            };
+
+            // Get category names
+            var categories = await _context.TaskCategories.ToListAsync();
+            ViewBag.Categories = categories;
+            
+            return View(taskStats);
+        }
+
+        // GET: Tasks/TeamTasks
+        [Authorize(Roles = "Lead")]
+        public async Task<IActionResult> TeamTasks()
+        {
+            var tasksQuery = _context.Tasks.Include(t => t.Category)
+                .Where(t => !t.IsCompleted)  // Only show incomplete tasks
+                .OrderBy(t => t.DueDate);
+                
+            return View("Index", await tasksQuery.ToListAsync());
+        }        private bool TaskExists(int id)
+        {
+            return _context.Tasks.Any(e => e.TaskId == id);
+        }
+          private static string GetUserRole(ApplicationUser user, string roleName)
+        {
+            // This is a simplified method for displaying user roles in the UI
+            // It doesn't access the database, just formats text
+            return roleName ?? "User";
+        }
+    }
+}
