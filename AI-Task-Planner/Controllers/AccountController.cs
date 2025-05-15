@@ -19,7 +19,7 @@ namespace AI_Task_Planner.Controllers
             _signInManager = signInManager;
         }
         
-        // GET: /Account/Login
+        // GET:     /Account/Login 
         [HttpGet]
         [AllowAnonymous]
         public IActionResult Login(string? returnUrl = null)
