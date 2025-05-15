@@ -8,20 +8,23 @@ using AI_Task_Planner.Data;
 using AI_Task_Planner.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
+using AI_Task_Planner.Services;
+using System.Text.Json;
 
 namespace AI_Task_Planner.Controllers
 {
-    [Authorize]
-    public class TasksController : Controller
+    [Authorize]    public class TasksController : Controller
     {
         private readonly ApplicationDbContext _context;
         private readonly UserManager<ApplicationUser> _userManager;
+        private readonly NaturalLanguageTaskService _nlpService;
 
-        public TasksController(ApplicationDbContext context, UserManager<ApplicationUser> userManager)
+        public TasksController(ApplicationDbContext context, UserManager<ApplicationUser> userManager, NaturalLanguageTaskService nlpService)
         {
             _context = context;
             _userManager = userManager;
-        }        // GET: Tasks
+            _nlpService = nlpService;
+        }// GET: Tasks
         public async Task<IActionResult> Index(string searchString, int? categoryId, bool? showCompleted)
         {
             // Get the current user and their roles to customize the view
@@ -538,9 +541,7 @@ namespace AI_Task_Planner.Controllers
             
             // Fallback to index if referer is not available
             return RedirectToAction(nameof(Index));
-        }
-
-        // GET: Tasks/Dashboard
+        }        // GET: Tasks/Dashboard
         [Authorize(Roles = "Manager")]
         public async Task<IActionResult> Dashboard()
         {
@@ -562,6 +563,214 @@ namespace AI_Task_Planner.Controllers
             ViewBag.Categories = categories;
             
             return View(taskStats);
+        }
+
+        // GET: Tasks/CreateWithNL
+        public IActionResult CreateWithNL()
+        {
+            return View();
+        }
+
+        // POST: Tasks/CreateWithNL
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> CreateWithNL(string naturalLanguageInput)
+        {
+            if (string.IsNullOrWhiteSpace(naturalLanguageInput))
+            {
+                ModelState.AddModelError("", "Please enter a task description");
+                return View();
+            }
+
+            try
+            {
+                var user = await _userManager.GetUserAsync(User);
+                if (user == null)
+                {
+                    return RedirectToAction("Login", "Account");
+                }
+
+                var result = await _nlpService.ParseNaturalLanguageTaskAsync(naturalLanguageInput, user.Id);
+
+                if (!result.Success)
+                {
+                    ModelState.AddModelError("", result.ErrorMessage ?? "Failed to parse task description");
+                    return View();
+                }
+
+                // Store the parsed task in TempData to be reviewed
+                TempData["ParsedTask"] = JsonSerializer.Serialize(result.Task);
+                TempData["OriginalInput"] = naturalLanguageInput;
+
+                // Redirect to confirmation page
+                return RedirectToAction(nameof(ConfirmTaskFromNL));
+            }
+            catch (Exception ex)
+            {
+                ModelState.AddModelError("", $"Error processing task: {ex.Message}");
+                return View();
+            }
+        }
+
+        // GET: Tasks/ConfirmTaskFromNL
+        public async Task<IActionResult> ConfirmTaskFromNL()
+        {
+            if (TempData["ParsedTask"] == null)
+            {
+                return RedirectToAction(nameof(CreateWithNL));
+            }
+
+            try
+            {
+                var taskJson = TempData["ParsedTask"]?.ToString();
+                if (string.IsNullOrEmpty(taskJson))
+                {
+                    return RedirectToAction(nameof(CreateWithNL));
+                }
+                
+                var task = JsonSerializer.Deserialize<UserTask>(taskJson);
+
+                if (task == null)
+                {
+                    return RedirectToAction(nameof(CreateWithNL));
+                }
+                
+                // Preserve TempData for the post action
+                TempData.Keep("ParsedTask");
+                TempData.Keep("OriginalInput");
+
+                // Get categories for the dropdown
+                ViewBag.Categories = new SelectList(_context.TaskCategories, "CategoryId", "Name", task.CategoryId);
+                
+                // Get users for assignment dropdown based on current user's role
+                var currentUser = await _userManager.GetUserAsync(User);
+                if (currentUser == null)
+                {
+                    return RedirectToAction("Login", "Account");
+                }
+                
+                var userRoles = await _userManager.GetRolesAsync(currentUser);
+                var userRole = userRoles.FirstOrDefault() ?? "User";
+                
+                if (userRole == "Manager")
+                {
+                    // Manager can assign to anyone
+                    var users = await _userManager.Users.OrderBy(u => u.LastName).ToListAsync();
+                    var userItems = new List<SelectListItem>();
+                    
+                    foreach (var u in users)
+                    {
+                        var uRoles = await _userManager.GetRolesAsync(u);
+                        var role = uRoles.FirstOrDefault() ?? "User";
+                        
+                        userItems.Add(new SelectListItem {
+                            Value = u.Id,
+                            Text = $"{u.LastName}, {u.FirstName} ({role})"
+                        });
+                    }
+                    
+                    ViewBag.Users = new SelectList(userItems, "Value", "Text", task.AssignedToUserId);
+                }
+                else if (userRole == "Lead")
+                {
+                    // Lead can assign to Users or self
+                    var userRoleId = await _context.Roles.Where(r => r.Name == "User").Select(r => r.Id).FirstOrDefaultAsync();
+                    var userIds = await _context.UserRoles
+                        .Where(ur => ur.RoleId == userRoleId)
+                        .Select(ur => ur.UserId)
+                        .ToListAsync();
+                    
+                    // Add lead's ID
+                    userIds.Add(currentUser.Id);
+                    
+                    // Get all users that match these IDs
+                    var users = await _userManager.Users
+                        .Where(u => userIds.Contains(u.Id))
+                        .OrderBy(u => u.LastName)
+                        .ToListAsync();
+                    
+                    var userItems = new List<SelectListItem>();
+                    
+                    foreach (var u in users)
+                    {
+                        var uRoles = await _userManager.GetRolesAsync(u);
+                        var role = uRoles.FirstOrDefault() ?? "User";
+                        
+                        userItems.Add(new SelectListItem {
+                            Value = u.Id,
+                            Text = $"{u.LastName}, {u.FirstName} ({role})"
+                        });
+                    }
+                    
+                    ViewBag.Users = new SelectList(userItems, "Value", "Text", task.AssignedToUserId);
+                }
+                else
+                {
+                    // Regular user can only assign to self
+                    var userItems = new List<SelectListItem>
+                    {
+                        new SelectListItem {
+                            Value = currentUser.Id,
+                            Text = $"{currentUser.LastName}, {currentUser.FirstName} (You)"
+                        }
+                    };
+                    
+                    ViewBag.Users = new SelectList(userItems, "Value", "Text", currentUser.Id);
+                }
+
+                ViewBag.OriginalInput = TempData["OriginalInput"]?.ToString();
+                ViewBag.Priorities = new SelectList(new[]
+                {
+                    new { Value = 1, Text = "High" },
+                    new { Value = 2, Text = "Medium" },
+                    new { Value = 3, Text = "Low" },
+                }, "Value", "Text", task.Priority);
+
+                return View(task);
+            }
+            catch (Exception ex)
+            {
+                ModelState.AddModelError("", $"Error preparing task form: {ex.Message}");
+                return RedirectToAction(nameof(CreateWithNL));
+            }
+        }
+
+        // POST: Tasks/ConfirmTaskFromNL
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ConfirmTaskFromNL([Bind("TaskId,Title,Description,DueDate,Priority,CategoryId,AssignedToUserId")] UserTask task)
+        {
+            if (ModelState.IsValid)
+            {
+                var currentUser = await _userManager.GetUserAsync(User);
+                if (currentUser == null)
+                {
+                    return RedirectToAction("Login", "Account");
+                }
+
+                // Set creation metadata
+                task.CreatedOn = DateTime.Now;
+                task.IsCompleted = false;
+                task.AssignedByUserId = currentUser.Id;
+                task.AssignedOn = DateTime.Now;
+
+                _context.Add(task);
+                await _context.SaveChangesAsync();
+                return RedirectToAction(nameof(Index));
+            }
+
+            // If we got this far, something failed, redisplay form
+            ViewBag.Categories = new SelectList(_context.TaskCategories, "CategoryId", "Name", task.CategoryId);
+            ViewBag.Priorities = new SelectList(new[]
+            {
+                new { Value = 1, Text = "High" },
+                new { Value = 2, Text = "Medium" },
+                new { Value = 3, Text = "Low" },
+            }, "Value", "Text", task.Priority);
+
+            ViewBag.OriginalInput = TempData["OriginalInput"]?.ToString();
+
+            return View(task);
         }
 
         // GET: Tasks/TeamTasks

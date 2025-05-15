@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("AI-Task-Planner")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+33b6e42e56aefb5546c75f980f893cc2556516ca")]
 [assembly: System.Reflection.AssemblyProductAttribute("AI-Task-Planner")]
 [assembly: System.Reflection.AssemblyTitleAttribute("AI-Task-Planner")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

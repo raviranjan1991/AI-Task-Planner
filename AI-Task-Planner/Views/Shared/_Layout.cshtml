@@ -57,13 +57,18 @@
                                 </li>
                             }
                         }
-                    </ul>
-                    <div class="d-flex align-items-center">
+                    </ul>                    <div class="d-flex align-items-center">
                         @if (User.Identity != null && User.Identity.IsAuthenticated)
                         {
-                            <a class="btn btn-success me-3" asp-controller="Tasks" asp-action="Create">
-                                <i class="fas fa-plus me-1"></i> New Task
-                            </a>
+                            <div class="dropdown me-3">
+                                <button class="btn btn-success dropdown-toggle" type="button" id="createTaskDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                                    <i class="fas fa-plus me-1"></i> New Task
+                                </button>
+                                <ul class="dropdown-menu" aria-labelledby="createTaskDropdown">
+                                    <li><a class="dropdown-item" asp-controller="Tasks" asp-action="Create"><i class="fas fa-tasks me-1"></i> Standard Task</a></li>
+                                    <li><a class="dropdown-item" asp-controller="Tasks" asp-action="CreateWithNL"><i class="fas fa-magic me-1"></i> Using Natural Language</a></li>
+                                </ul>
+                            </div>
                         }
                         <partial name="_LoginPartial" />
                     </div>
